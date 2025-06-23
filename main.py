@@ -7,7 +7,7 @@ from gui.main_window import MainWindow
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("LaTeX Table Builder")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("1.0.1")
     
     window = MainWindow()
     window.show()
