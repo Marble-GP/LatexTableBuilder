@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (QTableWidget, QTableWidgetItem, QHeaderView, 
-                               QAbstractItemView, QApplication)
+                               QAbstractItemView, QApplication, QMessageBox)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor, QPalette
 from core.table_model import TableModel
@@ -255,6 +255,8 @@ class TableEditor(QTableWidget):
             self.move_to_next_cell()
         elif event.key() == Qt.Key_Backtab:
             self.move_to_previous_cell()
+        elif (event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_V):
+            self.paste_from_clipboard()
         else:
             super().keyPressEvent(event)
     
@@ -300,6 +302,124 @@ class TableEditor(QTableWidget):
             
         self.setCurrentCell(prev_row, prev_col)
     
+    def paste_from_clipboard(self):
+        """Handle paste operation from clipboard"""
+        from utils.clipboard import get_from_clipboard
+        from utils.paste_parser import PasteParser
+        
+        # Get clipboard data
+        clipboard_data = get_from_clipboard()
+        if not clipboard_data:
+            QMessageBox.information(self, "Paste", "No data found in clipboard")
+            return
+        
+        # Parse clipboard data
+        table_data, metadata = PasteParser.parse_clipboard_data(clipboard_data)
+        
+        if not metadata.get("success", False):
+            QMessageBox.warning(self, "Paste Error", 
+                              f"Failed to parse clipboard data:\n{metadata.get('error', 'Unknown error')}")
+            return
+        
+        if not table_data:
+            QMessageBox.information(self, "Paste", "No table data found in clipboard")
+            return
+        
+        # Get current selection or cursor position
+        current_row = self.currentRow()
+        current_col = self.currentColumn()
+        
+        # If no valid position, start at (0,0)
+        if current_row < 0:
+            current_row = 0
+        if current_col < 0:
+            current_col = 0
+        
+        # Check if we need to resize the table
+        required_rows = current_row + metadata["rows"]
+        required_cols = current_col + metadata["cols"]
+        
+        needs_resize = (required_rows > self.table_model.rows or 
+                       required_cols > self.table_model.cols)
+        
+        if needs_resize:
+            # Ask user for confirmation
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Question)
+            msg.setWindowTitle("Resize Table")
+            msg.setText("The pasted data is larger than the current table.")
+            msg.setInformativeText(f"Current table: {self.table_model.rows}×{self.table_model.cols}\n"
+                                 f"Required size: {required_rows}×{required_cols}\n\n"
+                                 f"Resize table to accommodate pasted data?")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setDefaultButton(QMessageBox.Yes)
+            
+            if msg.exec() == QMessageBox.Yes:
+                # Resize the table
+                new_rows = max(self.table_model.rows, required_rows)
+                new_cols = max(self.table_model.cols, required_cols)
+                
+                if not self.table_model.resize(new_rows, new_cols):
+                    QMessageBox.warning(self, "Resize Error", "Failed to resize table")
+                    return
+                
+                # Update spinboxes in main window if available
+                main_window = self.window()
+                if hasattr(main_window, 'rows_spinbox'):
+                    main_window.rows_spinbox.setValue(new_rows)
+                if hasattr(main_window, 'cols_spinbox'):
+                    main_window.cols_spinbox.setValue(new_cols)
+            else:
+                # User declined resize, ask how to handle
+                msg2 = QMessageBox()
+                msg2.setIcon(QMessageBox.Question)
+                msg2.setWindowTitle("Paste Options")
+                msg2.setText("How would you like to handle the oversized data?")
+                msg2.addButton("Paste what fits", QMessageBox.AcceptRole)
+                msg2.addButton("Cancel", QMessageBox.RejectRole)
+                
+                if msg2.exec() != QMessageBox.AcceptRole:
+                    return
+        
+        # Perform the paste operation
+        pasted_cells = 0
+        skipped_cells = 0
+        
+        for row_idx, row_data in enumerate(table_data):
+            target_row = current_row + row_idx
+            if target_row >= self.table_model.rows:
+                break
+                
+            for col_idx, cell_content in enumerate(row_data):
+                target_col = current_col + col_idx
+                if target_col >= self.table_model.cols:
+                    break
+                
+                # Check if cell is part of a merged region
+                cell = self.table_model.get_cell(target_row, target_col)
+                if cell and cell.is_merged_part:
+                    skipped_cells += 1
+                    continue
+                
+                # Set cell content
+                self.table_model.set_cell_content(target_row, target_col, cell_content)
+                pasted_cells += 1
+        
+        # Refresh the table display
+        self.refresh_table()
+        
+        # Show status message
+        main_window = self.window()
+        if hasattr(main_window, 'statusbar'):
+            if skipped_cells > 0:
+                main_window.statusbar.showMessage(
+                    f"Pasted {pasted_cells} cells, skipped {skipped_cells} merged cells")
+            else:
+                main_window.statusbar.showMessage(f"Pasted {pasted_cells} cells")
+        
+        # Emit signal to update preview
+        self.cell_changed.emit(current_row, current_col, "")
+    
     def contextMenuEvent(self, event):
         from PySide6.QtWidgets import QMenu
         from PySide6.QtGui import QAction
@@ -318,6 +438,13 @@ class TableEditor(QTableWidget):
         
         header_action.triggered.connect(self.toggle_headers_context)
         menu.addAction(header_action)
+        
+        menu.addSeparator()
+        
+        paste_action = QAction("Paste", self)
+        paste_action.setShortcut("Ctrl+V")
+        paste_action.triggered.connect(self.paste_from_clipboard)
+        menu.addAction(paste_action)
         
         menu.addSeparator()
         

@@ -223,6 +223,13 @@ class MainWindow(QMainWindow):
         
         edit_menu = menubar.addMenu("&Edit")
         
+        paste_action = QAction("&Paste", self)
+        paste_action.setShortcut(QKeySequence.Paste)
+        paste_action.triggered.connect(self.paste_from_clipboard)
+        edit_menu.addAction(paste_action)
+        
+        edit_menu.addSeparator()
+        
         copy_latex_action = QAction("Copy &LaTeX", self)
         copy_latex_action.setShortcut(QKeySequence("Ctrl+L"))
         copy_latex_action.triggered.connect(self.copy_to_clipboard)
@@ -271,6 +278,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction("Open", self.open_file)
         toolbar.addAction("Save", self.save_file)
         toolbar.addSeparator()
+        toolbar.addAction("Paste", self.paste_from_clipboard)
         toolbar.addAction("Copy LaTeX", self.copy_to_clipboard)
     
     def setup_statusbar(self):
@@ -824,6 +832,10 @@ class MainWindow(QMainWindow):
             
             msg.exec()
             self.statusbar.showMessage("Clipboard operation failed - see message for details")
+    
+    def paste_from_clipboard(self):
+        """Handle paste operation - delegate to table editor"""
+        self.table_editor.paste_from_clipboard()
     
     def new_table(self):
         self.table_model.clear()
