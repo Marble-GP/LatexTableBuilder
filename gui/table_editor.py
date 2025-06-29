@@ -1,8 +1,57 @@
 from PySide6.QtWidgets import (QTableWidget, QTableWidgetItem, QHeaderView, 
-                               QAbstractItemView, QApplication, QMessageBox)
+                               QAbstractItemView, QApplication, QMessageBox, QStyledItemDelegate, QLineEdit)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor, QPalette
 from core.table_model import TableModel
+
+
+class JapaneseInputDelegate(QStyledItemDelegate):
+    """Custom delegate that properly supports Japanese IME input"""
+    
+    def createEditor(self, parent, option, index):
+        """Create editor widget with proper IME support"""
+        editor = QLineEdit(parent)
+        
+        # Enable IME support
+        editor.setAttribute(Qt.WidgetAttribute.WA_InputMethodEnabled, True)
+        
+        # Set input method hints for better IME behavior
+        editor.setInputMethodHints(Qt.InputMethodHint.ImhPreferNumbers | 
+                                 Qt.InputMethodHint.ImhPreferUppercase |
+                                 Qt.InputMethodHint.ImhPreferLowercase)
+        
+        # Use font that supports Japanese characters
+        font = editor.font()
+        japanese_fonts = ["Noto Sans CJK JP", "Yu Gothic", "MS Gothic", "Hiragino Sans", "DejaVu Sans"]
+        
+        from PySide6.QtGui import QFontDatabase
+        available_fonts = QFontDatabase.families()
+        
+        for font_name in japanese_fonts:
+            if font_name in available_fonts:
+                font.setFamily(font_name)
+                break
+        else:
+            font.setStyleHint(QFont.SansSerif)
+            font.setStyleStrategy(QFont.PreferAntialias | QFont.PreferQuality)
+        
+        editor.setFont(font)
+        
+        return editor
+    
+    def setEditorData(self, editor, index):
+        """Set the data to be edited"""
+        text = index.model().data(index, Qt.ItemDataRole.EditRole)
+        if text is not None:
+            editor.setText(str(text))
+    
+    def setModelData(self, editor, model, index):
+        """Set the edited data back to the model"""
+        model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
+    
+    def updateEditorGeometry(self, editor, option, index):
+        """Update editor geometry"""
+        editor.setGeometry(option.rect)
 
 
 class TableEditor(QTableWidget):
@@ -30,9 +79,36 @@ class TableEditor(QTableWidget):
         self.horizontalHeader().setDefaultSectionSize(100)
         self.verticalHeader().setDefaultSectionSize(30)
         
+        # Use a font that supports Japanese characters
         font = QFont()
         font.setPointSize(10)
+        
+        # Try to use fonts that support Japanese characters
+        japanese_fonts = ["Noto Sans CJK JP", "Yu Gothic", "MS Gothic", "Hiragino Sans", "DejaVu Sans"]
+        font_found = False
+        
+        from PySide6.QtGui import QFontDatabase
+        available_fonts = QFontDatabase.families()
+        
+        for font_name in japanese_fonts:
+            if font_name in available_fonts:
+                font.setFamily(font_name)
+                font_found = True
+                break
+        
+        # If no Japanese-specific font found, ensure default font supports Unicode
+        if not font_found:
+            font.setStyleHint(QFont.SansSerif)
+            font.setStyleStrategy(QFont.PreferAntialias | QFont.PreferQuality)
+        
         self.setFont(font)
+        
+        # Enable IME support for Japanese input
+        self.setAttribute(Qt.WidgetAttribute.WA_InputMethodEnabled, True)
+        
+        # Set custom delegate for proper Japanese IME support
+        self.japanese_delegate = JapaneseInputDelegate(self)
+        self.setItemDelegate(self.japanese_delegate)
         
         self.setAlternatingRowColors(True)
         
@@ -259,6 +335,14 @@ class TableEditor(QTableWidget):
             self.paste_from_clipboard()
         else:
             super().keyPressEvent(event)
+    
+    def inputMethodEvent(self, event):
+        """Handle input method events for Japanese IME"""
+        super().inputMethodEvent(event)
+    
+    def inputMethodQuery(self, query):
+        """Provide input method query information"""
+        return super().inputMethodQuery(query)
     
     def delete_selected_cells(self):
         selected_ranges = self.get_selected_ranges()

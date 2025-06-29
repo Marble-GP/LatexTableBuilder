@@ -648,6 +648,34 @@ class MainWindow(QMainWindow):
                 QLabel {
                     color: #ffffff;
                 }
+                QCheckBox {
+                    color: #ffffff;
+                    spacing: 5px;
+                }
+                QCheckBox::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border: 2px solid #666666;
+                    border-radius: 3px;
+                    background-color: #404040;
+                }
+                QCheckBox::indicator:unchecked {
+                    background-color: #404040;
+                    border: 2px solid #666666;
+                }
+                QCheckBox::indicator:checked {
+                    background-color: #4CAF50;
+                    border: 2px solid #4CAF50;
+                    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOSIgdmlld0JveD0iMCAwIDEyIDkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xMC42IDEuNEw0LjQgNy42TDEuNCA0LjYiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=);
+                    image-position: center;
+                }
+                QCheckBox::indicator:hover {
+                    border: 2px solid #777777;
+                }
+                QCheckBox::indicator:disabled {
+                    background-color: #2b2b2b;
+                    border: 2px solid #555555;
+                }
             """)
         else:
             # Light theme
@@ -707,6 +735,34 @@ class MainWindow(QMainWindow):
                 }
                 QLabel {
                     color: #000000;
+                }
+                QCheckBox {
+                    color: #000000;
+                    spacing: 5px;
+                }
+                QCheckBox::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border: 2px solid #cccccc;
+                    border-radius: 3px;
+                    background-color: #ffffff;
+                }
+                QCheckBox::indicator:unchecked {
+                    background-color: #ffffff;
+                    border: 2px solid #cccccc;
+                }
+                QCheckBox::indicator:checked {
+                    background-color: #4CAF50;
+                    border: 2px solid #4CAF50;
+                    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOSIgdmlld0JveD0iMCAwIDEyIDkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xMC42IDEuNEw0LjQgNy42TDEuNCA0LjYiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=);
+                    image-position: center;
+                }
+                QCheckBox::indicator:hover {
+                    border: 2px solid #aaaaaa;
+                }
+                QCheckBox::indicator:disabled {
+                    background-color: #f0f0f0;
+                    border: 2px solid #dddddd;
                 }
             """)
         
@@ -873,16 +929,13 @@ class MainWindow(QMainWindow):
         except:
             info.append("LaTeX: Not installed")
         
-        # Check ImageMagick
-        try:
-            result = subprocess.run(['convert', '--version'], 
-                                  capture_output=True, timeout=5)
-            if result.returncode == 0:
-                convert_version = result.stdout.decode().split('\n')[0]
-                info.append(f"ImageMagick: {convert_version}")
-            else:
-                info.append("ImageMagick: Not available")
-        except:
+        # Check ImageMagick using smart detection
+        from utils.imagemagick_detector import get_imagemagick_info
+        
+        imagemagick_info = get_imagemagick_info()
+        if imagemagick_info:
+            info.append(f"ImageMagick: {imagemagick_info.display_name}")
+        else:
             info.append("ImageMagick: Not installed")
         
         # Check clipboard

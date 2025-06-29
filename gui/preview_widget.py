@@ -50,9 +50,15 @@ class LaTeXRenderThread(QThread):
                 if result.returncode != 0 or not pdf_file.exists():
                     return False, ""
                 
-                # Use higher density for better quality and auto-crop to table content
+                # Use smart ImageMagick detection for optimal command pattern
+                from utils.imagemagick_detector import get_convert_command
+                
+                convert_cmd = get_convert_command(str(pdf_file), str(png_file))
+                if not convert_cmd:
+                    return False, ""
+                
                 convert_result = subprocess.run(
-                    ['convert', '-density', '300', '-quality', '100', '-trim', '+repage', str(pdf_file), str(png_file)],
+                    convert_cmd,
                     capture_output=True,
                     text=True,
                     timeout=30
@@ -163,9 +169,8 @@ class PreviewWidget(QWidget):
         self.preview_scroll.setMinimumHeight(300)
         
         self.preview_label = QLabel()
-        self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setStyleSheet("background-color: white; border: 1px solid gray;")
         self.preview_label.setText("LaTeX preview will appear here")
+        self._ensure_preview_text_readable()
         
         self.preview_scroll.setWidget(self.preview_label)
         self.splitter.addWidget(self.preview_scroll)
@@ -180,7 +185,27 @@ class PreviewWidget(QWidget):
         self.code_edit.setReadOnly(True)
         self.code_edit.setMaximumHeight(200)
         
-        font = QFont("Courier New", 9)
+        # Use a monospace font that supports Japanese characters
+        from PySide6.QtGui import QFontDatabase
+        available_fonts = QFontDatabase.families()
+        
+        # Try monospace fonts that support Japanese characters
+        japanese_mono_fonts = ["Noto Sans Mono CJK JP", "MS Gothic", "Courier New", "DejaVu Sans Mono", "Consolas"]
+        font = QFont()
+        font.setPointSize(9)
+        font_found = False
+        
+        for font_name in japanese_mono_fonts:
+            if font_name in available_fonts:
+                font.setFamily(font_name)
+                font_found = True
+                break
+        
+        # Fallback to system monospace font
+        if not font_found:
+            font.setStyleHint(QFont.Monospace)
+            font.setStyleStrategy(QFont.PreferAntialias | QFont.PreferQuality)
+        
         self.code_edit.setFont(font)
         
         code_layout.addWidget(self.code_edit)
@@ -239,11 +264,11 @@ class PreviewWidget(QWidget):
         except (subprocess.TimeoutExpired, FileNotFoundError):
             missing.append("pdflatex (LaTeX)")
         
-        try:
-            subprocess.run(['convert', '--version'], 
-                         capture_output=True, timeout=5)
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            missing.append("convert (ImageMagick)")
+        # Check for ImageMagick using smart detection
+        from utils.imagemagick_detector import is_imagemagick_available
+        
+        if not is_imagemagick_available():
+            missing.append("ImageMagick (convert/magick command)")
         
         return {
             "available": len(missing) == 0,
@@ -259,6 +284,7 @@ class PreviewWidget(QWidget):
             self.render_thread.wait()
         
         self.preview_label.setText("Rendering LaTeX...")
+        self._ensure_preview_text_readable()
         self.refresh_btn.setEnabled(False)
         
         self.render_thread = LaTeXRenderThread(latex_code)
@@ -279,8 +305,10 @@ class PreviewWidget(QWidget):
                 self._scale_pixmap_to_fit()
             else:
                 self.preview_label.setText("Failed to load rendered image")
+                self._ensure_preview_text_readable()
         else:
             self.preview_label.setText("LaTeX rendering failed\nCheck your LaTeX installation")
+            self._ensure_preview_text_readable()
     
     def _set_initial_zoom(self):
         """Set a reasonable initial zoom level for new images"""
@@ -543,6 +571,12 @@ class PreviewWidget(QWidget):
             self.reset_zoom()
         else:
             super().keyPressEvent(event)
+    
+    def _ensure_preview_text_readable(self):
+        """Ensure preview text is readable by setting black color on white background"""
+        self.preview_label.setStyleSheet("background-color: white; border: 1px solid gray; color: black;")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setWordWrap(True)
     
     def resizeEvent(self, event):
         super().resizeEvent(event)

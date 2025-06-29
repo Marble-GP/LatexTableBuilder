@@ -91,6 +91,24 @@ class StyleConfigDialog(QDialog):
         group = QGroupBox("Style Presets")
         layout = QVBoxLayout(group)
         
+        # Load preset section
+        load_layout = QHBoxLayout()
+        load_layout.addWidget(QLabel("Load preset:"))
+        
+        self.preset_combo = QComboBox()
+        self.preset_combo.addItem("-- Select Preset --")
+        self.update_preset_combo()
+        load_layout.addWidget(self.preset_combo)
+        
+        load_btn = QPushButton("Load")
+        load_btn.clicked.connect(self.load_preset)
+        load_layout.addWidget(load_btn)
+        
+        delete_btn = QPushButton("Delete")
+        delete_btn.clicked.connect(self.delete_preset)
+        load_layout.addWidget(delete_btn)
+        
+        layout.addLayout(load_layout)
         
         # Save preset
         save_layout = QHBoxLayout()
@@ -330,8 +348,69 @@ class StyleConfigDialog(QDialog):
         
         
         QMessageBox.information(self, "Success", f"Preset '{name}' saved successfully!")
+        self.preset_name_edit.clear()
+        self.update_preset_combo()
     
+    def update_preset_combo(self):
+        """Update the preset combo box with available presets"""
+        self.preset_combo.clear()
+        self.preset_combo.addItem("-- Select Preset --")
+        for name in sorted(self.saved_styles.keys()):
+            self.preset_combo.addItem(name)
     
+    def load_preset(self):
+        """Load selected preset and apply its settings"""
+        preset_name = self.preset_combo.currentText()
+        if preset_name == "-- Select Preset --" or preset_name not in self.saved_styles:
+            QMessageBox.warning(self, "Warning", "Please select a valid preset.")
+            return
+        
+        style = self.saved_styles[preset_name]
+        self.apply_style_to_controls(style)
+        QMessageBox.information(self, "Success", f"Preset '{preset_name}' loaded successfully!")
+    
+    def delete_preset(self):
+        """Delete selected preset"""
+        preset_name = self.preset_combo.currentText()
+        if preset_name == "-- Select Preset --" or preset_name not in self.saved_styles:
+            QMessageBox.warning(self, "Warning", "Please select a valid preset.")
+            return
+        
+        reply = QMessageBox.question(self, "Confirm", 
+                                   f"Are you sure you want to delete preset '{preset_name}'?",
+                                   QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            del self.saved_styles[preset_name]
+            self.save_styles()
+            self.update_preset_combo()
+            QMessageBox.information(self, "Success", f"Preset '{preset_name}' deleted successfully!")
+    
+    def apply_style_to_controls(self, style):
+        """Apply a style to all UI controls"""
+        # Lines section
+        self.all_rows_check.setChecked(style.all_rows_lines)
+        self.all_columns_check.setChecked(style.all_columns_lines)
+        
+        # Borders section
+        self.top_bottom_borders_check.setChecked(style.top_bottom_borders)
+        self.left_right_borders_check.setChecked(style.left_right_borders)
+        
+        # Header section
+        self.header_rows_check.setChecked(style.header_rows_thick)
+        self.header_columns_check.setChecked(style.header_columns_thick)
+        
+        # Title section
+        if hasattr(self, 'include_title_check'):
+            self.include_title_check.setChecked(getattr(style, 'include_title', False))
+        
+        # Alignment section
+        if hasattr(self, 'align_combo'):
+            alignment_map = {
+                'left': 0, 'center': 1, 'right': 2,
+                'justify': 3, 'paragraph': 4
+            }
+            if hasattr(style, 'default_alignment') and style.default_alignment in alignment_map:
+                self.align_combo.setCurrentIndex(alignment_map[style.default_alignment])
     
     def accept(self):
         """Accept dialog and return current style"""

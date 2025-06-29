@@ -69,16 +69,52 @@ Test
         # Start with only the most basic packages
         essential_packages = ['array']
         optional_packages = ['booktabs', 'longtable', 'multirow']
+        japanese_packages = ['xeCJK', 'luatexja', 'CJKutf8', 'CJK']
         
         # Always include array (it's in latex-base)
         package_includes = ["\\usepackage{array}"]
+        
+        # Check if Japanese text is present and add appropriate packages
+        if self._contains_japanese_text(latex_content):
+            japanese_package_added = False
+            # Try Japanese packages in order of preference
+            for package in japanese_packages:
+                if self.is_package_available(package):
+                    if package == 'xeCJK':
+                        package_includes.append("\\usepackage{xeCJK}")
+                        package_includes.append("\\setCJKmainfont{NotoSansCJK-Regular}")
+                    elif package == 'luatexja':
+                        package_includes.append("\\usepackage{luatexja}")
+                    elif package == 'CJKutf8':
+                        package_includes.append("\\usepackage{CJKutf8}")
+                    elif package == 'CJK':
+                        package_includes.append("\\usepackage{CJK}")
+                    japanese_package_added = True
+                    break
+            
+            # If no Japanese packages are available, add UTF-8 input encoding
+            if not japanese_package_added:
+                package_includes.append("\\usepackage[utf8]{inputenc}")
+                package_includes.append("\\usepackage[T1]{fontenc}")
         
         # Test optional packages
         for package in optional_packages:
             if self.is_package_available(package):
                 package_includes.append(f"\\usepackage{{{package}}}")
         
-        template = f"""\\documentclass{{article}}
+        # Create document with appropriate wrapper for CJK if needed
+        if self._contains_japanese_text(latex_content) and any('CJK' in inc for inc in package_includes):
+            template = f"""\\documentclass{{article}}
+{chr(10).join(package_includes)}
+\\begin{{document}}
+\\pagestyle{{empty}}
+\\begin{{CJK}}{{UTF8}}{{min}}
+{latex_content}
+\\end{{CJK}}
+\\end{{document}}
+"""
+        else:
+            template = f"""\\documentclass{{article}}
 {chr(10).join(package_includes)}
 \\begin{{document}}
 \\pagestyle{{empty}}
@@ -86,6 +122,16 @@ Test
 \\end{{document}}
 """
         return template
+    
+    def _contains_japanese_text(self, text: str) -> bool:
+        """Check if text contains Japanese characters (Hiragana, Katakana, Kanji)"""
+        import re
+        # Unicode ranges for Japanese characters
+        hiragana = r'[\u3040-\u309F]'  # Hiragana
+        katakana = r'[\u30A0-\u30FF]'  # Katakana
+        kanji = r'[\u4E00-\u9FAF]'     # Kanji (CJK Unified Ideographs)
+        japanese_pattern = f'({hiragana}|{katakana}|{kanji})'
+        return bool(re.search(japanese_pattern, text))
 
 
 # Global instance
@@ -109,5 +155,9 @@ def get_package_recommendations() -> Dict[str, str]:
         'longtable': 'texlive-latex-recommended', 
         'multirow': 'texlive-latex-recommended',
         'array': 'texlive-latex-base',
-        'amsmath': 'texlive-latex-recommended'
+        'amsmath': 'texlive-latex-recommended',
+        'xeCJK': 'texlive-xetex (for Japanese with XeLaTeX)',
+        'luatexja': 'texlive-luatex (for Japanese with LuaLaTeX)',
+        'CJKutf8': 'texlive-latex-cjk (for Japanese with pdfLaTeX)',
+        'CJK': 'texlive-latex-cjk (for Japanese with pdfLaTeX)'
     }
